@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Blob Golf</title>
+<style>
+  :root{
+    --bg0:#0b1020; --bg1:#141c33;
+    --panel:rgba(13,18,34,.88); --line:rgba(255,255,255,.10);
+    --ink:#e8ecf6; --dim:#8b94ad; --accent:#ffd75e; --ok:#5ee6a8; --warn:#ff6b6b;
+    font-size:14px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg0);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;color:var(--ink);}
+  canvas#game{display:block;width:100vw;height:100vh;cursor:crosshair;}
+
+  .panel{position:fixed;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;backdrop-filter:blur(8px);padding:10px 12px;
+    box-shadow:0 8px 24px rgba(0,0,0,.45);user-select:none;}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;
+    cursor:move;margin:-2px 0 4px 0;}
+  .panel-head span{font-size:.7rem;letter-spacing:.16em;color:var(--dim);font-weight:600;}
+  button.mini{padding:0 7px;line-height:18px;font-size:.85rem;border-radius:6px;}
+  .panel.collapsed > :not(.panel-head){display:none!important;}
+  body.ui-hidden .panel, body.ui-hidden #hint{display:none!important;}
+  .grip{cursor:move;color:var(--dim);letter-spacing:-2px;}
+
+  #topbar{top:12px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;padding:8px 12px;}
+  #topbar .title{font-weight:700;letter-spacing:.08em;color:var(--accent);font-size:.85rem;}
+  button{background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:6px 10px;cursor:pointer;font:inherit;font-size:.85rem;}
+  button:hover{background:rgba(255,255,255,.14);}
+  button.active{background:var(--accent);color:#1a1405;border-color:var(--accent);font-weight:600;}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+  #editor{top:70px;left:12px;width:212px;display:flex;flex-direction:column;gap:8px;}
+  #editor h3, #settings h3{font-size:.72rem;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;margin:2px 0;}
+  .toolgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+  .toolgrid button{font-size:.78rem;padding:7px 4px;}
+  .row{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--dim);}
+  .row label{flex:0 0 62px;}
+  .row input[type=range]{flex:1;accent-color:var(--accent);}
+  .row output{flex:0 0 38px;text-align:right;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .row input[type=color]{flex:1;height:26px;border:none;background:none;cursor:pointer;}
+
+  #settings{top:70px;right:12px;width:230px;display:flex;flex-direction:column;gap:8px;}
+
+  #hud{bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:18px;align-items:center;
+    font-size:.85rem;color:var(--dim);padding:8px 16px;}
+  #hud b{color:var(--ink);font-variant-numeric:tabular-nums;}
+  #hint{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);color:var(--dim);
+    font-size:.75rem;letter-spacing:.03em;text-shadow:0 1px 4px #000;pointer-events:none;text-align:center;}
+
+  #banner{position:fixed;top:38%;left:50%;transform:translate(-50%,-50%);text-align:center;
+    pointer-events:none;display:none;}
+  #banner .big{font-size:3rem;font-weight:800;color:var(--accent);text-shadow:0 4px 24px rgba(0,0,0,.6);letter-spacing:.04em;}
+  #banner .sub{color:var(--ink);margin-top:6px;font-size:1rem;}
+
+  #modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50;}
+  #modal .box{width:min(560px,90vw);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px;}
+  #modal textarea{width:100%;height:180px;background:#0a0e1c;color:var(--ok);border:1px solid var(--line);
+    border-radius:8px;padding:8px;font:12px/1.4 ui-monospace,Consolas,monospace;resize:vertical;}
+  #modal .btns{display:flex;gap:8px;justify-content:flex-end;}
+  .divider{height:1px;background:var(--line);margin:2px 0;}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="panel" id="topbar">
+  <span class="grip">⠿</span>
+  <span class="title">BLOB GOLF</span>
+  <button id="modeEdit" class="active">Build (Tab)</button>
+  <button id="modePlay">Play (Tab)</button>
+</div>
+
+<div class="panel" id="editor">
+  <div class="panel-head"><span>BUILD TOOLS</span><button class="mini" data-collapse>–</button></div>
+  <h3>Shapes</h3>
+  <div class="toolgrid">
+    <button data-tool="rect"   class="active">▮ Rect</button>
+    <button data-tool="circle">● Circle</button>
+    <button data-tool="erect">▯ Erase R</button>
+    <button data-tool="ecircle">○ Erase C</button>
+    <button data-tool="spawn">⛳ Spawn</button>
+    <button data-tool="hole">🕳 Hole</button>
+  </div>
+  <div class="row"><label>Width</label><input type="range" id="toolW" min="8" max="700" value="240"><output id="toolWo">240</output></div>
+  <div class="row"><label>Height</label><input type="range" id="toolH" min="8" max="700" value="120"><output id="toolHo">120</output></div>
+  <div class="row"><label>Color</label><input type="color" id="toolColor" value="#3fae6f"></div>
+  <div class="divider"></div>
+  <h3>World bounds</h3>
+  <div class="row"><label>Width</label><input type="range" id="worldW" min="1200" max="6400" step="100" value="3200"><output id="worldWo">3200</output></div>
+  <div class="row"><label>Height</label><input type="range" id="worldH" min="800" max="3200" step="100" value="1400"><output id="worldHo">1400</output></div>
+  <div class="divider"></div>
+  <div class="toolgrid">
+    <button id="undoBtn">Undo (Ctrl+Z)</button>
+    <button id="clearBtn">Reset level</button>
+    <button id="exportBtn">Export</button>
+    <button id="importBtn">Import</button>
+  </div>
+  <h3>Pan: right-drag / arrows · Zoom: wheel</h3>
+</div>
+
+<div class="panel" id="settings">
+  <div class="panel-head"><span>SETTINGS</span><button class="mini" data-collapse>–</button></div>
+  <h3>Shot preview</h3>
+  <div class="row"><label>Opacity</label><input type="range" id="pvOp" min="0" max="100" value="55"><output id="pvOpo">55%</output></div>
+  <div class="row"><label>Length</label><input type="range" id="pvLen" min="0" max="100" value="35"><output id="pvLeno">35%</output></div>
+  <h3>Hole rules</h3>
+  <div class="row"><label>Sink speed</label><input type="range" id="sinkSpd" min="10" max="400" value="110"><output id="sinkSpdo">110</output></div>
+  <div class="row"><label>Hole size</label><input type="range" id="holeR" min="6" max="48" value="16"><output id="holeRo">16</output></div>
+  <h3>Physics</h3>
+  <div class="row"><label>Roll fric</label><input type="range" id="rollF" min="0" max="80" value="24"><output id="rollFo">2.4</output></div>
+  <div class="row"><label>Bounce</label><input type="range" id="bounce" min="0" max="90" value="42"><output id="bounceo">0.42</output></div>
+</div>
+
+<div class="panel" id="hud">
+  <span class="grip">⠿</span>
+  <span>Strokes <b id="strokes">0</b></span>
+  <span>Power <b id="powOut">45%</b></span>
+  <button id="followBtn">⌖ Recenter (C)</button>
+</div>
+<div id="hint">A / D aim · W / S power · SPACE shoot · R reset · right-drag pan · C recenter · H hide UI</div>
+
+<div id="banner"><div class="big">HOLED!</div><div class="sub"></div></div>
+
+<div id="modal"><div class="box">
+  <h3 id="modalTitle">Level JSON</h3>
+  <textarea id="modalText" spellcheck="false"></textarea>
+  <div class="btns">
+    <button id="modalLoad">Load this level</button>
+    <button id="modalCopy">Copy</button>
+    <button id="modalClose">Close</button>
+  </div>
+</div></div>
+
+<script>
+"use strict";
+/* ============================================================
+   BLOB GOLF — single-file 2D golf with a carve-the-terrain editor
+   Terrain = offscreen bitmap. Shapes paint, erasers cut (dest-out).
+   Physics samples terrain pixels around the ball's rim to find
+   the surface normal, so any carved curve just works.
+   ============================================================ */
+
+// ---------- world / canvases ----------
+let WORLD_W = 3200, WORLD_H = 1400;
+const cv  = document.getElementById('game');
+const ctx = cv.getContext('2d');
+const terrain = document.createElement('canvas');
+terrain.width = WORLD_W; terrain.height = WORLD_H;
+const tctx = terrain.getContext('2d', { willReadFrequently:true });
+let pix = null;                    // cached alpha data for collisions
+let pixDirty = true;
+
+function refreshPix(){ pix = tctx.getImageData(0,0,WORLD_W,WORLD_H).data; pixDirty = false; }
+function setWorldSize(w, h){
+  WORLD_W = w; WORLD_H = h;
+  terrain.width = w; terrain.height = h;      // resizing clears the bitmap
+  regenStars();
+  rebuildTerrain();                            // re-stamps every op, refreshes pixels
+}
+function solid(x, y){
+  if (y >= WORLD_H || x < 0 || x >= WORLD_W) return true;   // walls + floor
+  if (y < 0) return false;                                   // open sky
+  return pix[(((y|0)*WORLD_W + (x|0))<<2)+3] > 16;
+}
+
+function resize(){ cv.width = innerWidth; cv.height = innerHeight; }
+addEventListener('resize', resize); resize();
+
+// ---------- state ----------
+const state = {
+  mode: 'edit',                    // 'edit' | 'play'
+  ops: [],                         // strokes: {tool,w,h,color,pts:[[x,y]..]}
+  spawn: null, hole: null,         // {x,y}
+  cam: { x: WORLD_W/2, y: WORLD_H/2, zoom: 0.7 },
+  tool: 'rect',
+  toolSize: { rect:[240,120], circle:[160,160], erect:[180,90], ecircle:[120,120] },
+  color: '#3fae6f',
+  settings: { pvOp:.55, pvLen:.35, sinkSpd:110, holeR:16, rollFric:2.4, rest:0.42 },
+  strokes: 0, holed: false, follow: true,
+};
+
+const ball = { x:0, y:0, vx:0, vy:0, r:7, resting:true, restT:0, alive:false, sink:0 };
+const aim  = { angle:-Math.PI*0.30, power:0.45 };
+const PHYS = { g:1900, rest:0.42, tanFric:0.90, rollFric:2.4, maxPow:1500, maxV:2600 };
+
+// ---------- terrain editing ----------
+function stampOp(op){
+  tctx.globalCompositeOperation = (op.tool==='erect'||op.tool==='ecircle') ? 'destination-out' : 'source-over';
+  tctx.fillStyle = op.color || '#000';
+  for (const [x,y] of op.pts){
+    tctx.beginPath();
+    if (op.tool==='rect'||op.tool==='erect') tctx.rect(x-op.w/2, y-op.h/2, op.w, op.h);
+    else tctx.ellipse(x, y, op.w/2, op.h/2, 0, 0, Math.PI*2);
+    tctx.fill();
+  }
+  tctx.globalCompositeOperation = 'source-over';
+}
+function rebuildTerrain(){
+  tctx.clearRect(0,0,WORLD_W,WORLD_H);
+  for (const op of state.ops) stampOp(op);
+  refreshPix(); saveLocal();
+}
+
+// ---------- ball physics (pixel collision) ----------
+const RIM_N = 16, RIM = [];
+for (let i=0;i<RIM_N;i++) RIM.push([Math.cos(i/RIM_N*2*Math.PI), Math.sin(i/RIM_N*2*Math.PI)]);
+
+function rimContact(b){
+  let sx=0, sy=0, n=0;
+  for (const [cx,cy] of RIM)
+    if (solid(b.x+cx*b.r, b.y+cy*b.r)){ sx+=cx; sy+=cy; n++; }
+  if (!n) return null;
+  let nx=-sx, ny=-sy, len=Math.hypot(nx,ny);
+  if (len < .001){ nx=0; ny=-1; } else { nx/=len; ny/=len; }
+  return { nx, ny, n };
+}
+
+// advance one small time slice; mutates b; returns contact normal or null
+function stepBall(b, dt){
+  b.vy += PHYS.g * dt;
+  const sp = Math.hypot(b.vx,b.vy);
+  if (sp > PHYS.maxV){ b.vx *= PHYS.maxV/sp; b.vy *= PHYS.maxV/sp; }
+
+  // move in ≤3px increments so we never tunnel through thin walls
+  const steps = Math.max(1, Math.ceil(sp*dt/3));
+  let contact = null;
+  for (let s=0; s<steps; s++){
+    b.x += b.vx*dt/steps; b.y += b.vy*dt/steps;
+    let c = rimContact(b);
+    if (!c) continue;
+    contact = c;
+    // push out of the surface (small steps — stop the moment we're free)
+    for (let i=0; i<80 && rimContact(b); i++){ b.x += c.nx*0.3; b.y += c.ny*0.3; }
+    // reflect
+    const vn = b.vx*c.nx + b.vy*c.ny;
+    if (vn < 0){
+      const tx=-c.ny, ty=c.nx;
+      let vt = (b.vx*tx + b.vy*ty) * PHYS.tanFric;
+      let vb = -vn * PHYS.rest;
+      if (vb < 40) vb = 0;                          // kill micro-bounces
+      b.vx = c.nx*vb + tx*vt;
+      b.vy = c.ny*vb + ty*vt;
+    }
+    // rolling friction while touching ground-ish surfaces
+    if (c.ny < -0.3){
+      const f = Math.max(0, 1 - PHYS.rollFric*dt);
+      b.vx *= f; b.vy *= f;
+    }
+  }
+  return contact;
+}
+
+function updateBall(dt){
+  if (!ball.alive) return;
+  if (state.holed){ ball.sink = Math.min(1, ball.sink + dt*2.2); return; }
+  if (ball.resting) return;
+
+  const SUB = 1/240;
+  let t = dt;
+  while (t > 0){
+    const h = Math.min(SUB, t); t -= h;
+    const c = stepBall(ball, h);
+    const sp = Math.hypot(ball.vx, ball.vy);
+
+    // hole capture — zone overlap + speed threshold
+    if (state.hole){
+      const d = Math.hypot(ball.x-state.hole.x, ball.y-state.hole.y);
+      if (d < state.settings.holeR && sp < state.settings.sinkSpd){
+        state.holed = true; ball.vx = ball.vy = 0;
+        showBanner(); return;
+      }
+    }
+    // settle detection — "grounded" also counts terrain just below the ball,
+    // because push-out separates us from the surface between contacts
+    const grounded = (c && c.ny < -0.55) ||
+      (!c && (solid(ball.x, ball.y + ball.r + 2) ||
+              solid(ball.x - ball.r*0.6, ball.y + ball.r + 2) ||
+              solid(ball.x + ball.r*0.6, ball.y + ball.r + 2)));
+    if (grounded && sp < 22){
+      ball.restT += h;
+      if (ball.restT > 0.18){ ball.resting = true; ball.vx = ball.vy = 0; }
+    } else if (!grounded) ball.restT = 0;
+  }
+}
+
+function shoot(){
+  if (!ball.alive || !ball.resting || state.holed) return;
+  const p = PHYS.maxPow * aim.power;
+  ball.vx = Math.cos(aim.angle)*p;
+  ball.vy = Math.sin(aim.angle)*p;
+  ball.resting = false; ball.restT = 0;
+  state.follow = true;
+  state.strokes++; refreshHud();
+}
+
+function resetHole(){
+  state.strokes = 0; state.holed = false; ball.sink = 0; state.follow = true;
+  document.getElementById('banner').style.display = 'none';
+  if (state.spawn){
+    ball.x = state.spawn.x; ball.y = state.spawn.y - ball.r - 1;
+    ball.vx = ball.vy = 0; ball.resting = true; ball.alive = true;
+  } else ball.alive = false;
+  refreshHud();
+}
+
+// ---------- shot preview ----------
+function previewPath(){
+  const secs = state.settings.pvLen * 3;                 // up to 3 s of flight
+  if (secs <= 0 || state.settings.pvOp <= 0) return [];
+  const b = { x:ball.x, y:ball.y, r:ball.r,
+              vx:Math.cos(aim.angle)*PHYS.maxPow*aim.power,
+              vy:Math.sin(aim.angle)*PHYS.maxPow*aim.power };
+  const pts = [], SUB = 1/240;
+  let t = 0, i = 0;
+  while (t < secs){
+    stepBall(b, SUB); t += SUB;
+    if (++i % 6 === 0) pts.push([b.x, b.y]);
+    if (Math.hypot(b.vx,b.vy) < 10 && t > .3) break;
+  }
+  return pts;
+}
+
+// ---------- snapping (spawn / hole tools) ----------
+function snapToGround(wx, wy){
+  const x = Math.max(0, Math.min(WORLD_W-1, wx));
+  for (let y = Math.max(0, wy|0); y < WORLD_H; y++)
+    if (solid(x, y)) return { x, y };
+  return { x, y: WORLD_H };
+}
+
+// ---------- camera ----------
+function screenToWorld(sx, sy){
+  const c = state.cam;
+  return { x:(sx - cv.width/2)/c.zoom + c.x, y:(sy - cv.height/2)/c.zoom + c.y };
+}
+
+// ---------- input ----------
+const keys = {};
+let mouse = { x:0, y:0, wx:0, wy:0, down:false, panning:false, px:0, py:0 };
+let curStroke = null, lastStamp = null;
+
+addEventListener('keydown', e=>{
+  if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+  keys[e.code] = true;
+  if (e.code === 'Tab'){ e.preventDefault(); setMode(state.mode==='edit'?'play':'edit'); }
+  if (e.code === 'Space'){ e.preventDefault(); if (state.mode==='play') shoot(); }
+  if (e.code === 'KeyR' && state.mode==='play') resetHole();
+  if (e.code === 'KeyC') state.follow = true;
+  if (e.code === 'KeyH') document.body.classList.toggle('ui-hidden');
+  if (e.code === 'KeyZ' && (e.ctrlKey||e.metaKey) && state.mode==='edit'){ e.preventDefault(); undo(); }
+});
+addEventListener('keyup', e=> keys[e.code] = false);
+
+cv.addEventListener('contextmenu', e=> e.preventDefault());
+cv.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const f = e.deltaY < 0 ? 1.12 : 1/1.12;
+  state.cam.zoom = Math.max(0.25, Math.min(2.5, state.cam.zoom*f));
+},{passive:false});
+
+cv.addEventListener('mousedown', e=>{
+  if (e.button === 2 || e.button === 1){
+    mouse.panning = true; mouse.px = e.clientX; mouse.py = e.clientY;
+    if (state.mode === 'play') state.follow = false;
+    return;
+  }
+  if (e.button !== 0 || state.mode !== 'edit') return;
+  const w = screenToWorld(e.clientX, e.clientY);
+  const t = state.tool;
+  if (t === 'spawn'){ state.spawn = snapToGround(w.x, w.y); saveLocal(); if(state.mode==='edit') return; }
+  else if (t === 'hole'){ state.hole = snapToGround(w.x, w.y); saveLocal(); }
+  else {
+    const [tw, th] = state.toolSize[t];
+    curStroke = { tool:t, w:tw, h:th, color:state.color, pts:[[w.x|0, w.y|0]] };
+    lastStamp = [w.x, w.y];
+    stampOp({ ...curStroke, pts:[curStroke.pts[0]] });
+    mouse.down = true;
+  }
+});
+addEventListener('mousemove', e=>{
+  mouse.x = e.clientX; mouse.y = e.clientY;
+  const w = screenToWorld(e.clientX, e.clientY);
+  mouse.wx = w.x; mouse.wy = w.y;
+  if (mouse.panning){
+    state.cam.x -= (e.clientX - mouse.px)/state.cam.zoom;
+    state.cam.y -= (e.clientY - mouse.py)/state.cam.zoom;
+    mouse.px = e.clientX; mouse.py = e.clientY;
+    return;
+  }
+  if (mouse.down && curStroke){
+    const gap = Math.max(6, Math.min(curStroke.w, curStroke.h)/4);
+    if (Math.hypot(w.x-lastStamp[0], w.y-lastStamp[1]) >= gap){
+      const p = [w.x|0, w.y|0];
+      curStroke.pts.push(p); lastStamp = [w.x, w.y];
+      stampOp({ ...curStroke, pts:[p] });
+    }
+  }
+});
+addEventListener('mouseup', ()=>{
+  mouse.panning = false;
+  if (mouse.down && curStroke){
+    state.ops.push(curStroke);
+    curStroke = null; refreshPix(); saveLocal();
+  }
+  mouse.down = false;
+});
+
+function undo(){ if (curStroke) return; state.ops.pop(); rebuildTerrain(); }
+
+// ---------- UI wiring ----------
+const $ = id => document.getElementById(id);
+function setMode(m){
+  state.mode = m;
+  $('modeEdit').classList.toggle('active', m==='edit');
+  $('modePlay').classList.toggle('active', m==='play');
+  $('editor').style.display = m==='edit' ? 'flex' : 'none';
+  $('hint').style.display = m==='play' ? 'block' : 'none';
+  cv.style.cursor = m==='edit' ? 'crosshair' : 'default';
+  if (m === 'play'){
+    if (pixDirty) refreshPix();
+    resetHole();
+    if (!state.spawn) flashBanner('NO SPAWN SET', 'Switch to Build mode and place a spawn point');
+  } else {
+    $('banner').style.display = 'none';
+  }
+}
+$('modeEdit').onclick = ()=> setMode('edit');
+$('modePlay').onclick = ()=> setMode('play');
+
+document.querySelectorAll('#editor [data-tool]').forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll('#editor [data-tool]').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    state.tool = b.dataset.tool;
+    const sz = state.toolSize[state.tool];
+    if (sz){ $('toolW').value = sz[0]; $('toolH').value = sz[1]; syncSizeOuts(); }
+  };
+});
+function syncSizeOuts(){ $('toolWo').textContent = $('toolW').value; $('toolHo').textContent = $('toolH').value; }
+$('toolW').oninput = $('toolH').oninput = ()=>{
+  syncSizeOuts();
+  if (state.toolSize[state.tool]) state.toolSize[state.tool] = [+$('toolW').value, +$('toolH').value];
+};
+$('toolColor').oninput = e => state.color = e.target.value;
+
+function bindSetting(id, out, key, fmt){
+  $(id).oninput = e=>{
+    const v = +e.target.value;
+    state.settings[key] = (key==='pvOp'||key==='pvLen') ? v/100 : v;
+    $(out).textContent = fmt(v); saveLocal();
+  };
+}
+bindSetting('pvOp','pvOpo','pvOp', v=>v+'%');
+bindSetting('pvLen','pvLeno','pvLen', v=>v+'%');
+bindSetting('sinkSpd','sinkSpdo','sinkSpd', v=>v);
+bindSetting('holeR','holeRo','holeR', v=>v);
+$('rollF').oninput = e=>{ PHYS.rollFric = state.settings.rollFric = +e.target.value/10;
+  $('rollFo').textContent = PHYS.rollFric.toFixed(1); saveLocal(); };
+$('bounce').oninput = e=>{ PHYS.rest = state.settings.rest = +e.target.value/100;
+  $('bounceo').textContent = PHYS.rest.toFixed(2); saveLocal(); };
+// world size applies on release (rebuild is heavy at big sizes)
+$('worldW').oninput = ()=> $('worldWo').textContent = $('worldW').value;
+$('worldH').oninput = ()=> $('worldHo').textContent = $('worldH').value;
+$('worldW').onchange = $('worldH').onchange = ()=> setWorldSize(+$('worldW').value, +$('worldH').value);
+
+$('undoBtn').onclick = undo;
+$('clearBtn').onclick = ()=>{ if (confirm('Reset to the default starter level? Your current build will be replaced.')) starterLevel(); };
+
+// export / import
+$('exportBtn').onclick = ()=>{
+  $('modalTitle').textContent = 'Export level — copy this JSON';
+  $('modalText').value = JSON.stringify(levelData());
+  $('modal').style.display = 'flex';
+};
+$('importBtn').onclick = ()=>{
+  $('modalTitle').textContent = 'Import level — paste JSON, then Load';
+  $('modalText').value = '';
+  $('modal').style.display = 'flex';
+};
+$('modalClose').onclick = ()=> $('modal').style.display = 'none';
+$('modalCopy').onclick = ()=>{ $('modalText').select(); document.execCommand('copy'); };
+$('modalLoad').onclick = ()=>{
+  try { loadLevel(JSON.parse($('modalText').value)); $('modal').style.display='none'; }
+  catch { alert('That JSON could not be read.'); }
+};
+
+function levelData(){
+  return { ops:state.ops, spawn:state.spawn, hole:state.hole, settings:state.settings,
+           world:{ w:WORLD_W, h:WORLD_H } };
+}
+function loadLevel(d){
+  state.ops = d.ops||[]; state.spawn = d.spawn||null; state.hole = d.hole||null;
+  if (d.settings) Object.assign(state.settings, d.settings);
+  PHYS.rollFric = state.settings.rollFric ?? 2.4;
+  PHYS.rest     = state.settings.rest ?? 0.42;
+  WORLD_W = (d.world && d.world.w) || 3200;
+  WORLD_H = (d.world && d.world.h) || 1400;
+  terrain.width = WORLD_W; terrain.height = WORLD_H; regenStars();
+  syncAllControls();
+  rebuildTerrain();
+}
+function syncAllControls(){
+  $('pvOp').value = state.settings.pvOp*100;  $('pvOpo').textContent = Math.round(state.settings.pvOp*100)+'%';
+  $('pvLen').value = state.settings.pvLen*100;$('pvLeno').textContent = Math.round(state.settings.pvLen*100)+'%';
+  $('sinkSpd').value = state.settings.sinkSpd;$('sinkSpdo').textContent = state.settings.sinkSpd;
+  $('holeR').value = state.settings.holeR;    $('holeRo').textContent = state.settings.holeR;
+  $('rollF').value = PHYS.rollFric*10;        $('rollFo').textContent = PHYS.rollFric.toFixed(1);
+  $('bounce').value = PHYS.rest*100;          $('bounceo').textContent = PHYS.rest.toFixed(2);
+  $('worldW').value = WORLD_W;                $('worldWo').textContent = WORLD_W;
+  $('worldH').value = WORLD_H;                $('worldHo').textContent = WORLD_H;
+}
+function saveLocal(){ try{ localStorage.setItem('blobgolf_level', JSON.stringify(levelData())); }catch{} }
+function tryLoadLocal(){
+  try{ const s = localStorage.getItem('blobgolf_level'); if (s){ loadLevel(JSON.parse(s)); return true; } }catch{}
+  return false;
+}
+
+function refreshHud(){
+  $('strokes').textContent = state.strokes;
+  $('powOut').textContent = Math.round(aim.power*100)+'%';
+}
+$('followBtn').onclick = ()=> state.follow = true;
+
+// ---------- draggable / collapsible panels ----------
+const uiPrefs = (()=>{ try{ return JSON.parse(localStorage.getItem('blobgolf_ui'))||{}; }catch{ return {}; } })();
+function saveUI(){ try{ localStorage.setItem('blobgolf_ui', JSON.stringify(uiPrefs)); }catch{} }
+
+function makeDraggable(panel, handle){
+  handle.addEventListener('mousedown', e=>{
+    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+    e.preventDefault();
+    const r = panel.getBoundingClientRect();
+    panel.style.left = r.left+'px'; panel.style.top = r.top+'px';
+    panel.style.right = 'auto'; panel.style.bottom = 'auto'; panel.style.transform = 'none';
+    const ox = e.clientX - r.left, oy = e.clientY - r.top;
+    const mv = ev=>{
+      panel.style.left = Math.max(0, Math.min(innerWidth-60,  ev.clientX-ox))+'px';
+      panel.style.top  = Math.max(0, Math.min(innerHeight-30, ev.clientY-oy))+'px';
+    };
+    const up = ()=>{
+      removeEventListener('mousemove', mv); removeEventListener('mouseup', up);
+      uiPrefs[panel.id] = uiPrefs[panel.id]||{};
+      uiPrefs[panel.id].left = panel.style.left; uiPrefs[panel.id].top = panel.style.top;
+      saveUI();
+    };
+    addEventListener('mousemove', mv); addEventListener('mouseup', up);
+  });
+}
+document.querySelectorAll('.panel').forEach(p=>{
+  const handle = p.querySelector('.panel-head') || p.querySelector('.grip') || p;
+  makeDraggable(p, handle);
+  const pref = uiPrefs[p.id];
+  if (pref && pref.left){
+    p.style.left = pref.left; p.style.top = pref.top;
+    p.style.right = 'auto'; p.style.bottom = 'auto'; p.style.transform = 'none';
+  }
+  if (pref && pref.collapsed) p.classList.add('collapsed');
+});
+document.querySelectorAll('[data-collapse]').forEach(btn=>{
+  const p = btn.closest('.panel');
+  const sync = ()=> btn.textContent = p.classList.contains('collapsed') ? '+' : '–';
+  btn.onclick = ()=>{
+    p.classList.toggle('collapsed'); sync();
+    uiPrefs[p.id] = uiPrefs[p.id]||{};
+    uiPrefs[p.id].collapsed = p.classList.contains('collapsed');
+    saveUI();
+  };
+  sync();
+});
+function showBanner(){ flashBanner('HOLED!', `${state.strokes} stroke${state.strokes===1?'':'s'} — press R to replay`); }
+function flashBanner(big, sub){
+  const b = $('banner');
+  b.querySelector('.big').textContent = big;
+  b.querySelector('.sub').textContent = sub;
+  b.style.display = 'block';
+}
+
+// ---------- per-frame key handling ----------
+function handleHeldKeys(dt){
+  if (state.mode === 'play'){
+    if (ball.resting && !state.holed){
+      const fine = keys.ShiftLeft || keys.ShiftRight ? 0.3 : 1;
+      if (keys.KeyA) aim.angle -= 1.9*dt*fine;
+      if (keys.KeyD) aim.angle += 1.9*dt*fine;
+      if (keys.KeyW) aim.power = Math.min(1, aim.power + 0.85*dt*fine);
+      if (keys.KeyS) aim.power = Math.max(0.04, aim.power - 0.85*dt*fine);
+      if (keys.KeyW||keys.KeyS) refreshHud();
+    }
+  }
+  const v = 900*dt/state.cam.zoom;
+  const arrows = keys.ArrowLeft||keys.ArrowRight||keys.ArrowUp||keys.ArrowDown;
+  if (arrows && state.mode === 'play') state.follow = false;
+  if (keys.ArrowLeft)  state.cam.x -= v;
+  if (keys.ArrowRight) state.cam.x += v;
+  if (keys.ArrowUp)    state.cam.y -= v;
+  if (keys.ArrowDown)  state.cam.y += v;
+}
+
+// ---------- rendering ----------
+let stars = [];
+function regenStars(){
+  stars = Array.from({length:120}, ()=>[Math.random()*WORLD_W, Math.random()*WORLD_H*0.6, Math.random()*1.4+0.4]);
+}
+regenStars();
+
+function draw(){
+  const w = cv.width, h = cv.height, c = state.cam;
+
+  // sky
+  const g = ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,'#0b1020'); g.addColorStop(.55,'#182142'); g.addColorStop(1,'#241d3d');
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+
+  // world transform
+  ctx.setTransform(c.zoom,0,0,c.zoom, w/2 - c.x*c.zoom, h/2 - c.y*c.zoom);
+
+  // stars + world border
+  ctx.fillStyle = 'rgba(255,255,255,.5)';
+  for (const [sx,sy,sr] of stars) ctx.fillRect(sx, sy, sr, sr);
+  ctx.strokeStyle = 'rgba(255,255,255,.14)';
+  ctx.lineWidth = 2/c.zoom; ctx.strokeRect(0,0,WORLD_W,WORLD_H);
+
+  // terrain
+  ctx.drawImage(terrain, 0, 0);
+
+  // hole
+  if (state.hole){
+    const hR = state.settings.holeR;
+    ctx.beginPath(); ctx.arc(state.hole.x, state.hole.y, hR, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,215,94,.14)'; ctx.fill();
+    ctx.setLineDash([4,4]); ctx.strokeStyle = 'rgba(255,215,94,.5)'; ctx.lineWidth = 1.5/c.zoom;
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = '#e8ecf6'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(state.hole.x, state.hole.y); ctx.lineTo(state.hole.x, state.hole.y-52); ctx.stroke();
+    ctx.fillStyle = '#ff6b6b';
+    ctx.beginPath(); ctx.moveTo(state.hole.x, state.hole.y-52);
+    ctx.lineTo(state.hole.x+26, state.hole.y-44); ctx.lineTo(state.hole.x, state.hole.y-36);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // spawn tee
+  if (state.spawn){
+    ctx.fillStyle = '#5ee6a8';
+    ctx.fillRect(state.spawn.x-10, state.spawn.y-3, 20, 3);
+    ctx.beginPath(); ctx.arc(state.spawn.x, state.spawn.y-6, 3, 0, Math.PI*2); ctx.fill();
+  }
+
+  if (state.mode === 'play') drawPlay();
+  else drawEditGhost();
+
+  ctx.setTransform(1,0,0,1,0,0);
+}
+
+function drawPlay(){
+  if (!ball.alive) return;
+  const canAim = ball.resting && !state.holed;
+
+  // preview
+  if (canAim && state.settings.pvOp > 0){
+    const pts = previewPath();
+    ctx.fillStyle = `rgba(255,255,255,${state.settings.pvOp})`;
+    for (const [x,y] of pts){ ctx.beginPath(); ctx.arc(x,y,2.4,0,Math.PI*2); ctx.fill(); }
+  }
+  // aimer — a rectangle that grows with power and orbits the ball
+  if (canAim){
+    const len = 22 + aim.power*110;
+    const hue = 130 - aim.power*130;                 // green → red
+    ctx.save();
+    ctx.translate(ball.x, ball.y); ctx.rotate(aim.angle);
+    ctx.fillStyle = `hsla(${hue},85%,60%,.95)`;
+    ctx.fillRect(ball.r+4, -3, len, 6);
+    ctx.fillRect(ball.r+4+len, -6, 4, 12);           // tip cap
+    ctx.restore();
+  }
+  // ball (sinks + fades when holed)
+  const s = 1 - ball.sink;
+  if (s > 0.02){
+    ctx.save();
+    ctx.globalAlpha = s;
+    const by = ball.y + ball.sink*14;
+    ctx.shadowColor = 'rgba(255,255,255,.7)'; ctx.shadowBlur = 12;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(ball.x, by, ball.r*s, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawEditGhost(){
+  const t = state.tool;
+  if (t === 'spawn' || t === 'hole'){
+    const p = snapToGround(mouse.wx, mouse.wy);
+    ctx.setLineDash([5,5]); ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1.5/state.cam.zoom;
+    ctx.beginPath(); ctx.moveTo(p.x, Math.min(mouse.wy, p.y)); ctx.lineTo(p.x, p.y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = t==='spawn' ? '#5ee6a8' : '#ffd75e';
+    ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI*2); ctx.fill();
+    return;
+  }
+  const [tw, th] = state.toolSize[t];
+  const erase = t==='erect'||t==='ecircle';
+  ctx.lineWidth = 1.5/state.cam.zoom;
+  ctx.strokeStyle = erase ? 'rgba(255,107,107,.9)' : 'rgba(255,255,255,.7)';
+  ctx.fillStyle   = erase ? 'rgba(255,107,107,.12)' : state.color + '55';
+  if (erase) ctx.setLineDash([6,4]);
+  ctx.beginPath();
+  if (t==='rect'||t==='erect') ctx.rect(mouse.wx-tw/2, mouse.wy-th/2, tw, th);
+  else ctx.ellipse(mouse.wx, mouse.wy, tw/2, th/2, 0, 0, Math.PI*2);
+  ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+}
+
+// ---------- main loop ----------
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now-last)/1000); last = now;
+  handleHeldKeys(dt);
+  if (state.mode === 'play'){
+    updateBall(dt);
+    if (state.follow && ball.alive){
+      state.cam.x += (ball.x - state.cam.x)*Math.min(1, dt*5);
+      state.cam.y += (ball.y - 90 - state.cam.y)*Math.min(1, dt*5);
+      state.cam.x = Math.max(cv.width /(2*state.cam.zoom), Math.min(WORLD_W - cv.width /(2*state.cam.zoom), state.cam.x));
+      state.cam.y = Math.max(cv.height/(2*state.cam.zoom), Math.min(WORLD_H - cv.height/(2*state.cam.zoom), state.cam.y));
+    }
+  }
+  draw();
+  requestAnimationFrame(frame);
+}
+
+// ---------- starter level (only if nothing saved) ----------
+function starterLevel(){
+  WORLD_W = 3200; WORLD_H = 1400;
+  terrain.width = WORLD_W; terrain.height = WORLD_H; regenStars();
+  const ground = { tool:'rect', w:1400, h:260, color:'#3fae6f',
+    pts:[[900,1150],[1500,1180],[2100,1150]] };
+  const hill = { tool:'circle', w:600, h:400, color:'#3fae6f', pts:[[1500,1040]] };
+  const bunker = { tool:'ecircle', w:340, h:190, color:'#000', pts:[[1500,930]] };
+  state.ops = [ground, hill, bunker];
+  rebuildTerrain();
+  state.spawn = snapToGround(560, 0);
+  state.hole  = snapToGround(2380, 0);
+  state.cam.x = WORLD_W/2; state.cam.y = WORLD_H/2;
+  syncAllControls();
+  saveLocal();
+}
+
+if (!tryLoadLocal()) starterLevel();
+refreshPix(); refreshHud(); syncSizeOuts(); setMode('edit');
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
