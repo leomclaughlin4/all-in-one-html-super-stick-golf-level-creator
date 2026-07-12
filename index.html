@@ -112,6 +112,7 @@
   <div class="row"><label>Sink speed</label><input type="range" id="sinkSpd" min="10" max="400" value="110"><output id="sinkSpdo">110</output></div>
   <div class="row"><label>Hole size</label><input type="range" id="holeR" min="6" max="48" value="16"><output id="holeRo">16</output></div>
   <h3>Physics</h3>
+  <div class="row"><label>Max power</label><input type="range" id="maxPow" min="400" max="3500" step="50" value="1500"><output id="maxPowo">1500</output></div>
   <div class="row"><label>Roll fric</label><input type="range" id="rollF" min="0" max="80" value="24"><output id="rollFo">2.4</output></div>
   <div class="row"><label>Bounce</label><input type="range" id="bounce" min="0" max="90" value="42"><output id="bounceo">0.42</output></div>
 </div>
@@ -180,7 +181,7 @@ const state = {
   tool: 'rect',
   toolSize: { rect:[240,120], circle:[160,160], erect:[180,90], ecircle:[120,120] },
   color: '#3fae6f',
-  settings: { pvOp:.55, pvLen:.35, sinkSpd:110, holeR:16, rollFric:2.4, rest:0.42 },
+  settings: { pvOp:.55, pvLen:.35, sinkSpd:110, holeR:16, rollFric:2.4, rest:0.42, maxPow:1500 },
   strokes: 0, holed: false, follow: true,
 };
 
@@ -459,6 +460,8 @@ bindSetting('pvOp','pvOpo','pvOp', v=>v+'%');
 bindSetting('pvLen','pvLeno','pvLen', v=>v+'%');
 bindSetting('sinkSpd','sinkSpdo','sinkSpd', v=>v);
 bindSetting('holeR','holeRo','holeR', v=>v);
+$('maxPow').oninput = e=>{ PHYS.maxPow = state.settings.maxPow = +e.target.value;
+  $('maxPowo').textContent = PHYS.maxPow; saveLocal(); };
 $('rollF').oninput = e=>{ PHYS.rollFric = state.settings.rollFric = +e.target.value/10;
   $('rollFo').textContent = PHYS.rollFric.toFixed(1); saveLocal(); };
 $('bounce').oninput = e=>{ PHYS.rest = state.settings.rest = +e.target.value/100;
@@ -498,6 +501,7 @@ function loadLevel(d){
   if (d.settings) Object.assign(state.settings, d.settings);
   PHYS.rollFric = state.settings.rollFric ?? 2.4;
   PHYS.rest     = state.settings.rest ?? 0.42;
+  PHYS.maxPow   = state.settings.maxPow ?? 1500;
   WORLD_W = (d.world && d.world.w) || 3200;
   WORLD_H = (d.world && d.world.h) || 1400;
   terrain.width = WORLD_W; terrain.height = WORLD_H; regenStars();
@@ -509,6 +513,7 @@ function syncAllControls(){
   $('pvLen').value = state.settings.pvLen*100;$('pvLeno').textContent = Math.round(state.settings.pvLen*100)+'%';
   $('sinkSpd').value = state.settings.sinkSpd;$('sinkSpdo').textContent = state.settings.sinkSpd;
   $('holeR').value = state.settings.holeR;    $('holeRo').textContent = state.settings.holeR;
+  $('maxPow').value = PHYS.maxPow;            $('maxPowo').textContent = PHYS.maxPow;
   $('rollF').value = PHYS.rollFric*10;        $('rollFo').textContent = PHYS.rollFric.toFixed(1);
   $('bounce').value = PHYS.rest*100;          $('bounceo').textContent = PHYS.rest.toFixed(2);
   $('worldW').value = WORLD_W;                $('worldWo').textContent = WORLD_W;
